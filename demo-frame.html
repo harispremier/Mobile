@@ -113,8 +113,10 @@
     background: var(--screen-bg, #000);
     display: flex; flex-direction: column;
   }
+  /* z-index + a 1px shadow of its own colour cover the hairline the black
+     screen background otherwise bleeds through at fractional zoom levels. */
   #statusbar {
-    flex: 0 0 auto;
+    flex: 0 0 auto; position: relative; z-index: 2;
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 26px; font-size: 14px; font-weight: 600;
     letter-spacing: .2px; user-select: none;
@@ -288,7 +290,7 @@ let state = {
   landscape:store.get('landscape', false),
   zoom:     store.get('zoom', 100),   // first run overrides this with a fit-to-window
   sbColor:  store.get('sbColor', '#ffffff'),
-  backdrop: store.get('backdrop', 'light'),
+  backdrop: store.get('backdrop', 'dark'),
   screenDark: store.get('screenDark', true),
   url:      store.get('url', DEFAULT_URL),
 };
@@ -328,6 +330,7 @@ function render() {
   el.statusbar.style.paddingTop = (d.notch === 'island' ? 4 : 0) + 'px';
   el.statusbar.style.background = state.sbColor;
   el.statusbar.style.color = contrastOn(state.sbColor);
+  el.statusbar.style.boxShadow = '0 1px 0 ' + state.sbColor;
 
   el.device.style.setProperty('--screen-bg', state.screenDark ? '#000' : '#fff');
   el.screenBg.textContent = state.screenDark ? 'Screen: dark' : 'Screen: light';

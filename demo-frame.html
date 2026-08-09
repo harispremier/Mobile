@@ -5,28 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Premier Mobile — Demo Frame</title>
 <style>
+  /* The controls stay dark always; only the stage behind the phone is themed,
+     so a light backdrop never turns the sidebar into glare on a screenshare. */
   :root {
-    --bg: #eceff3;
-    --panel: #ffffff;
-    --panel-border: #d8dee7;
-    --text: #1d2430;
-    --text-dim: #66707f;
-    --accent: #2f6feb;
-    --shell: #1c1c1e;
-    --shell-edge: #3a3a3e;
-    --scale: 1;
-  }
-  :root[data-bg="dark"] {
     --bg: #14161a;
     --panel: #1e2126;
     --panel-border: #2e333b;
     --text: #e8ebef;
     --text-dim: #98a1ae;
+    --accent: #4d8bff;
+    --shell: #1c1c1e;
     --shell-edge: #4a4a50;
-  }
-  :root[data-bg="brand"] {
-    --bg: #0f2744; --panel: #17324f; --panel-border: #274b70;
-    --text: #eaf1f9; --text-dim: #9fb4cc; --shell-edge: #4a4a50;
+    --stage-bg: #14161a;
+    --scale: 1;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -85,7 +76,21 @@
     flex: 1 1 auto; position: relative;
     display: flex;
     overflow: auto; padding: 24px;
+    background: var(--stage-bg);
   }
+
+  /* backdrop swatches */
+  #swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  #swatches button {
+    aspect-ratio: 1; padding: 0; border-radius: 6px;
+    border: 1px solid rgba(255,255,255,.18);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+  }
+  #swatches button:hover { border-color: var(--accent); }
+  #swatches button[aria-pressed="true"] {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent;
+  }
+  #swatches button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* #reserve holds the post-scale footprint so the stage can scroll to it;
      margin:auto centres without clipping the edges the way justify-content
      :center does once the device exceeds the stage. #scaler must stay at its
@@ -110,13 +115,16 @@
   #screen {
     position: relative; overflow: hidden;
     border-radius: var(--screen-radius, 46px);
-    background: var(--screen-bg, #000);
+    background: #000;
     display: flex; flex-direction: column;
   }
-  /* z-index + a 1px shadow of its own colour cover the hairline the black
-     screen background otherwise bleeds through at fractional zoom levels. */
+  /* position:relative alone lifts this above the iframe so its 1px shadow can
+     cover the hairline the black screen background bleeds through at
+     fractional zoom. Do NOT add z-index — that promotes it to its own layer,
+     and Chrome then drops #screen's rounded-corner clipping, squaring off the
+     bar over the bezel. */
   #statusbar {
-    flex: 0 0 auto; position: relative; z-index: 2;
+    flex: 0 0 auto; position: relative;
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 26px; font-size: 14px; font-weight: 600;
     letter-spacing: .2px; user-select: none;
@@ -124,11 +132,11 @@
   #statusbar .icons { display: flex; align-items: center; gap: 5px; }
   #statusbar svg { display: block; }
   /* The app's html/body are transparent, so any area its own layout doesn't
-     cover falls through to whatever sits behind. Dark reads as screen; white
-     reads as a rendering gap. Toggleable, since the logged-in app may differ. */
+     cover falls through to whatever sits behind. Black reads as screen;
+     white would read as a rendering gap. */
   iframe {
     flex: 1 1 auto; width: 100%; border: 0; display: block;
-    background: var(--screen-bg, #000);
+    background: #000;
   }
   /* notch / island / punch-hole */
   #island {
@@ -145,6 +153,16 @@
   .btn-power { right: -2.5px; top: 22%; width: 3px; height: 76px; border-radius: 0 2px 2px 0; }
   .btn-vol-u { left: -2.5px; top: 17%; width: 3px; height: 46px; border-radius: 2px 0 0 2px; }
   .btn-vol-d { left: -2.5px; top: 27%; width: 3px; height: 46px; border-radius: 2px 0 0 2px; }
+
+  /* The iframe's initial document paints its own white canvas before the app
+     commits, so black is held over the screen until the load event fires. */
+  #veil {
+    position: absolute; inset: 0; z-index: 3;
+    background: #000; pointer-events: none;
+    opacity: 1;                       /* appears instantly — no fade-in gap */
+  }
+  #veil.done { opacity: 0; }
+  @media (prefers-reduced-motion: reduce) { #veil { transition: none; } }
 
   /* ---------- fallback notice ---------- */
   #fallback {
@@ -216,8 +234,12 @@
     <input type="color" id="sb-color" title="Match the status bar to your app's header">
     <span class="grow" style="color:var(--text-dim);font-size:12px">Status bar colour</span>
   </div>
-  <button id="screen-bg" title="Colour behind the app, where its own layout leaves gaps (B)">Screen: dark</button>
-  <button id="bg-toggle" title="Backdrop behind the phone">Backdrop</button>
+  <label>Backdrop</label>
+  <div id="swatches"></div>
+  <div class="row">
+    <input type="color" id="bd-color" title="Any other backdrop colour">
+    <span class="grow" style="color:var(--text-dim);font-size:12px">Custom colour</span>
+  </div>
 
   <div class="spacer"></div>
 
@@ -225,7 +247,7 @@
   <button id="reset" title="Back to the shipped defaults">Reset</button>
   <details id="shortcuts">
     <summary>Shortcuts</summary>
-    <div id="hint">H — presenter mode · Esc — exit · R — reload · T — rotate · B — screen bg · +/− — size · 0 — fit</div>
+    <div id="hint">H — presenter mode · Esc — exit · R — reload · T — rotate · +/− — size · 0 — fit</div>
   </details>
 </div>
 
@@ -245,6 +267,7 @@
           </span>
         </div>
         <iframe id="app" allow="geolocation; camera; microphone; clipboard-write; fullscreen; autoplay"></iframe>
+        <div id="veil"></div>
         <div id="fallback">
           <h3>The app didn't load in the frame</h3>
           <p>It may be blocking embedding, or your session cookie didn't carry over. Open it in a phone-sized window instead.</p>
@@ -267,17 +290,26 @@ const DEVICES = [
   { id:'ipadm',  name:'iPad mini',          w:744, h:1133, sr:34, cr:22, notch:'none',   sb:26 },
 ];
 const DEFAULT_URL = 'https://mobile.premierconstructionsoftware.com/';
-const BACKDROPS = ['light','dark','brand'];
+const BACKDROPS = [
+  { name: 'Charcoal',      hex: '#14161a' },
+  { name: 'Black',         hex: '#000000' },
+  { name: 'Slate',         hex: '#2b303a' },
+  { name: 'Premier navy',  hex: '#0f2744' },
+  { name: 'Light grey',    hex: '#eceff3' },
+  { name: 'White',         hex: '#ffffff' },
+  { name: 'Warm sand',     hex: '#d9d2c5' },
+  { name: 'Chroma green',  hex: '#00b140' },   // for keying the phone out in OBS
+];
 
 const $ = id => document.getElementById(id);
 const el = {
   select:$('device-select'), url:$('url'), go:$('go'), reload:$('reload'),
   zoom:$('zoom'), zoomVal:$('zoom-val'), rotate:$('rotate'), sbColor:$('sb-color'),
-  bgToggle:$('bg-toggle'), present:$('present'), device:$('device'), screen:$('screen'),
+  present:$('present'), device:$('device'), screen:$('screen'),
   statusbar:$('statusbar'), app:$('app'), island:$('island'),
   fallback:$('fallback'), popout:$('popout'), clock:$('clock'), scaler:$('scaler'),
   exitPresent:$('exit-present'), reserve:$('reserve'),
-  screenBg:$('screen-bg'),
+  swatches:$('swatches'), bdColor:$('bd-color'), veil:$('veil'),
 };
 
 const store = {
@@ -290,8 +322,9 @@ let state = {
   landscape:store.get('landscape', false),
   zoom:     store.get('zoom', 100),   // first run overrides this with a fit-to-window
   sbColor:  store.get('sbColor', '#ffffff'),
-  backdrop: store.get('backdrop', 'dark'),
-  screenDark: store.get('screenDark', true),
+  // Guarded: earlier versions stored names like "dark" here, which would feed
+  // an invalid colour into CSS and blank the stage.
+  backdrop:   (v => /^#[0-9a-f]{6}$/i.test(v) ? v : '#14161a')(store.get('backdrop', '')),
   url:      store.get('url', DEFAULT_URL),
 };
 
@@ -299,6 +332,17 @@ DEVICES.forEach(d => {
   const o = document.createElement('option');
   o.value = d.id; o.textContent = d.name;
   el.select.appendChild(o);
+});
+
+BACKDROPS.forEach(b => {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.dataset.hex = b.hex;
+  btn.style.background = b.hex;
+  btn.title = b.name;
+  btn.setAttribute('aria-label', b.name);
+  btn.addEventListener('click', () => { state.backdrop = b.hex; render(); });
+  el.swatches.appendChild(btn);
 });
 
 function currentDevice() {
@@ -332,8 +376,10 @@ function render() {
   el.statusbar.style.color = contrastOn(state.sbColor);
   el.statusbar.style.boxShadow = '0 1px 0 ' + state.sbColor;
 
-  el.device.style.setProperty('--screen-bg', state.screenDark ? '#000' : '#fff');
-  el.screenBg.textContent = state.screenDark ? 'Screen: dark' : 'Screen: light';
+  document.documentElement.style.setProperty('--stage-bg', state.backdrop);
+  el.bdColor.value = state.backdrop;
+  [...el.swatches.children].forEach(b =>
+    b.setAttribute('aria-pressed', b.dataset.hex.toLowerCase() === state.backdrop.toLowerCase()));
 
   el.island.className = d.notch;
 
@@ -342,17 +388,16 @@ function render() {
   el.zoomVal.textContent = state.zoom + '%';
   el.select.value = d.id;
   el.sbColor.value = state.sbColor;
-  document.documentElement.dataset.bg = state.backdrop;
 
   // Reserve the post-scale footprint so the stage can scroll to the full device.
   el.reserve.style.width  = (w + 22) * (state.zoom / 100) + 'px';
   el.reserve.style.height = (h + 22) * (state.zoom / 100) + 'px';
 
-  ['device','landscape','zoom','sbColor','backdrop','screenDark']
-    .forEach(k => store.set(k, state[k]));
+  ['device','landscape','zoom','sbColor','backdrop'].forEach(k => store.set(k, state[k]));
 }
 
 let loadTimer = null;
+let veilTimer = null;
 function load(url) {
   if (!url) return;
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
@@ -361,12 +406,38 @@ function load(url) {
   store.set('url', url);
 
   el.fallback.classList.remove('show');
+  el.veil.classList.remove('done');
   clearTimeout(loadTimer);
+  clearTimeout(veilTimer);
   // We can't read a cross-origin frame, so fall back on a timeout instead.
   loadTimer = setTimeout(() => el.fallback.classList.add('show'), 9000);
   el.app.src = url;
 }
-el.app.addEventListener('load', () => clearTimeout(loadTimer));
+// The veil covers the iframe's blank white canvas before the app commits, then
+// lifts the instant the frame loads — no hold, no fade. If the app ever posts
+// APP_READY it lifts on that signal instead, which can only be earlier.
+const APP_READY = 'premier-app-ready';
+
+function dropVeil() {
+  clearTimeout(veilTimer);
+  el.veil.classList.add('done');
+}
+
+// Only trust a ready signal from the origin we actually loaded.
+window.addEventListener('message', e => {
+  let expected = null;
+  try { expected = new URL(state.url).origin; } catch (err) { return; }
+  if (e.origin !== expected) return;
+  const kind = typeof e.data === 'string' ? e.data : (e.data && e.data.type);
+  if (kind === APP_READY) dropVeil();
+});
+
+el.app.addEventListener('load', () => {
+  clearTimeout(loadTimer);
+  dropVeil();
+});
+// If the frame is blocked and never loads, drop the veil so the fallback shows.
+setTimeout(dropVeil, 9000);
 
 function popOut() {
   const d = currentDevice();
@@ -394,10 +465,6 @@ el.go.addEventListener('click', () => load(el.url.value.trim()));
 el.url.addEventListener('keydown', e => { if (e.key === 'Enter') load(el.url.value.trim()); });
 el.reload.addEventListener('click', () => load(state.url));
 el.popout.addEventListener('click', popOut);
-el.bgToggle.addEventListener('click', () => {
-  state.backdrop = BACKDROPS[(BACKDROPS.indexOf(state.backdrop) + 1) % BACKDROPS.length];
-  render();
-});
 // Largest zoom that keeps the whole device inside the stage, snapped to the
 // slider's 5% steps and clamped to its range.
 function fitToWindow() {
@@ -414,8 +481,12 @@ $('fit').addEventListener('click', fitToWindow);
 // Settings live in this browser's localStorage, not in the file, so a rep who
 // fiddles their copy into a corner needs a way back.
 $('reset').addEventListener('click', () => {
-  ['device','landscape','zoom','sbColor','backdrop','screenDark','url']
-    .forEach(k => { try { localStorage.removeItem('pcsframe.' + k); } catch (e) {} });
+  // Sweep every key we own, so settings left by older versions go too.
+  try {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('pcsframe.'))
+      .forEach(k => localStorage.removeItem(k));
+  } catch (e) {}
   location.reload();
 });
 
@@ -424,7 +495,7 @@ function setPresenting(on) {
 }
 el.present.addEventListener('click', () => setPresenting(true));
 el.exitPresent.addEventListener('click', () => setPresenting(false));
-el.screenBg.addEventListener('click', () => { state.screenDark = !state.screenDark; render(); });
+el.bdColor.addEventListener('input', () => { state.backdrop = el.bdColor.value; render(); });
 
 document.addEventListener('keydown', e => {
   // Esc always gets you out, even mid-typing.
@@ -432,7 +503,6 @@ document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   const k = e.key.toLowerCase();
   if (k === 'h') setPresenting(!document.body.classList.contains('presenting'));
-  else if (k === 'b') { state.screenDark = !state.screenDark; render(); }
   else if (k === 'r') load(state.url);
   else if (k === 't') { state.landscape = !state.landscape; render(); }
   else if (k === 'f') document.documentElement.requestFullscreen?.();

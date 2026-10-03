@@ -25,25 +25,30 @@
     background: var(--bg);
     color: var(--text);
     font: 14px/1.4 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    /* Row, not column: controls live down one side so the full window height
-       stays available to a portrait phone. Swap to row-reverse for a right-hand
-       sidebar — that single word is the only change needed. */
-    display: flex; flex-direction: row;
+    display: flex;
     overflow: hidden;
   }
 
   /* ---------- sidebar ---------- */
+  /* A drawer over the stage rather than a column beside it: the stage always
+     spans the full window, so the phone never shifts when the controls slide
+     in or out mid-demo. Visibility flips only after the slide finishes, which
+     keeps hidden controls out of the Tab order. */
   #bar {
-    flex: 0 0 206px;
+    position: fixed; top: 0; bottom: 0; left: 0; width: 206px;
     display: flex; flex-direction: column; align-items: stretch; gap: 8px;
     padding: 14px 12px;
     background: var(--panel);
     border-right: 1px solid var(--panel-border);
-    box-shadow: 1px 0 3px rgba(0,0,0,.06);
+    box-shadow: 4px 0 18px rgba(0,0,0,.35);
     overflow-y: auto;
     z-index: 20;
+    transition: transform .22s ease, visibility 0s;
   }
-  body.presenting #bar { display: none; }
+  body.presenting #bar {
+    transform: translateX(-100%); visibility: hidden;
+    transition: transform .22s ease, visibility 0s .22s;
+  }
   #bar label {
     color: var(--text-dim); font-size: 10.5px;
     text-transform: uppercase; letter-spacing: .5px; font-weight: 600;
@@ -145,7 +150,8 @@
   }
   /* top is measured from the shell, so it includes the 11px bezel padding —
      23px puts the island 12px below the screen edge, as on a real handset. */
-  #island.island { width: 107px; height: 31px; border-radius: 16px; top: 23px; }
+  /* 70px: the iPhone 18 Pro's island is about 35% narrower than earlier Pros'. */
+  #island.island { width: 70px; height: 31px; border-radius: 16px; top: 23px; }
   #island.punch  { width: 11px;  height: 11px; border-radius: 50%; top: 24px; }
   #island.none   { display: none; }
   /* physical side buttons */
@@ -153,6 +159,21 @@
   .btn-power { right: -2.5px; top: 22%; width: 3px; height: 76px; border-radius: 0 2px 2px 0; }
   .btn-vol-u { left: -2.5px; top: 17%; width: 3px; height: 46px; border-radius: 2px 0 0 2px; }
   .btn-vol-d { left: -2.5px; top: 27%; width: 3px; height: 46px; border-radius: 2px 0 0 2px; }
+  /* Foldables: a hinge mark in the bezel where the two halves meet. Kept off
+     the screen so it can never be mistaken for a rendering seam in the app. */
+  #device[data-fold]::before, #device[data-fold]::after {
+    content: ''; position: absolute; background: rgba(0,0,0,.6);
+  }
+  #device[data-fold="v"]::before, #device[data-fold="v"]::after {
+    left: 50%; width: 2px; height: 11px; transform: translateX(-50%);
+  }
+  #device[data-fold="v"]::before { top: 0; }
+  #device[data-fold="v"]::after  { bottom: 0; }
+  #device[data-fold="h"]::before, #device[data-fold="h"]::after {
+    top: 50%; height: 2px; width: 11px; transform: translateY(-50%);
+  }
+  #device[data-fold="h"]::before { left: 0; }
+  #device[data-fold="h"]::after  { right: 0; }
 
   /* The iframe's initial document paints its own white canvas before the app
      commits, so black is held over the screen until the load event fires. */
@@ -190,21 +211,36 @@
   #shortcuts summary:hover { color: var(--accent); }
   #hint { color: var(--text-dim); font-size: 10.5px; line-height: 1.7; padding-top: 6px; }
 
-  /* Always-available way out of presenter mode — faint until you reach for it,
-     so it stays invisible on a screenshare but is never a guessing game. */
-  #exit-present {
-    display: none;
-    position: absolute; top: 10px; right: 12px; z-index: 30;
-    padding: 5px 11px; border-radius: 20px;
-    font-size: 12px; opacity: .18; transition: opacity .15s;
+  /* Hide and show share one spot, the bar's top-left corner, so the controls
+     toggle from the same place without moving the mouse. */
+  .icon-btn {
+    width: 34px; height: 34px; padding: 0; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
   }
-  body.presenting #exit-present { display: block; }
-  #exit-present:hover { opacity: 1; }
+  /* No shrink: on a short window the bar's column overflows, and flex would
+     squash this before anything else, since its content is only an icon. */
+  #present { align-self: flex-start; flex-shrink: 0; }
+  /* The way back to the controls. Invisible while the rep is in the app, so
+     nothing sits on the screenshare; it surfaces when the mouse moves over the
+     backdrop. top/left match #bar's padding so it lands on #present exactly. */
+  #show-bar {
+    display: none;
+    position: fixed; top: 14px; left: 12px; z-index: 30;
+    opacity: 0; transition: opacity .3s;
+  }
+  body.presenting #show-bar { display: flex; }
+  #show-bar.nudge { opacity: .55; }
+  #show-bar:hover, #show-bar:focus-visible { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { #bar, #show-bar { transition: none; } }
 </style>
 </head>
 <body>
 
 <div id="bar">
+  <button id="present" class="icon-btn" title="Hide controls (H). They also tuck away on their own a few seconds after you move off them." aria-label="Hide controls">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.5 3.5 8 8 12.5M12.5 3.5 8 8l4.5 4.5"/></svg>
+  </button>
+
   <label for="device-select">Device</label>
   <select id="device-select"></select>
   <button id="rotate" title="Rotate (T)">⟳ Rotate</button>
@@ -243,13 +279,15 @@
 
   <div class="spacer"></div>
 
-  <button id="present" class="primary" title="Hide these controls (H)">Presenter mode</button>
   <button id="reset" title="Back to the shipped defaults">Reset</button>
   <details id="shortcuts">
     <summary>Shortcuts</summary>
-    <div id="hint">H — presenter mode · Esc — exit · R — reload · T — rotate · +/− — size · 0 — fit</div>
+    <div id="hint">H — show/hide controls · Esc — show controls · F — full screen · R — reload · T — rotate · +/− — size · 0 — fit</div>
   </details>
 </div>
+<button id="show-bar" class="icon-btn" title="Show controls (H)" aria-label="Show controls">
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h7M13 4h1M2 12h1M7 12h7"/><circle cx="11" cy="4" r="1.8"/><circle cx="5" cy="12" r="1.8"/></svg>
+</button>
 
 <div id="stage">
   <div id="reserve"><div id="scaler">
@@ -277,15 +315,20 @@
       <div id="island"></div>
     </div>
   </div></div>
-  <button id="exit-present">Exit presenter mode — H or Esc</button>
 </div>
 
 <script>
+// Ids name the line, not the model year, so a yearly refresh is just a new
+// name and size and every rep's saved choice carries over.
 const DEVICES = [
-  { id:'ip15p',  name:'iPhone 15 Pro',      w:393, h:852,  sr:56, cr:46, notch:'island', sb:54 },
-  { id:'ip15pm', name:'iPhone 15 Pro Max',  w:430, h:932,  sr:58, cr:48, notch:'island', sb:54 },
-  { id:'px8',    name:'Pixel 8',            w:412, h:915,  sr:42, cr:32, notch:'punch',  sb:34 },
-  { id:'s24',    name:'Galaxy S24',         w:360, h:780,  sr:40, cr:30, notch:'punch',  sb:34 },
+  { id:'ipp',    name:'iPhone 18 Pro',      w:402, h:874,  sr:56, cr:46, notch:'island', sb:54 },
+  { id:'ippm',   name:'iPhone 18 Pro Max',  w:440, h:956,  sr:58, cr:48, notch:'island', sb:54 },
+  // Unfolded, the inner screen is landscape and its camera sits under the
+  // panel, so nothing is cut out. Folded, the outer screen has a punch-hole.
+  { id:'ipduo',  name:'iPhone Duo (open)',  w:669, h:951,  sr:40, cr:28, notch:'none',   sb:30, landscape:true, fold:true },
+  { id:'ipduoc', name:'iPhone Duo (closed)',w:466, h:678,  sr:50, cr:40, notch:'punch',  sb:40 },
+  { id:'pixel',  name:'Pixel 11',           w:412, h:923,  sr:42, cr:32, notch:'punch',  sb:34 },
+  { id:'galaxy', name:'Galaxy S26',         w:360, h:780,  sr:40, cr:30, notch:'punch',  sb:34 },
   { id:'ipadm',  name:'iPad mini',          w:744,  h:1133, sr:34, cr:22, notch:'none',   sb:26, landscape:true },
 ];
 const DEFAULT_URL = 'https://mobile.premierconstructionsoftware.com/';
@@ -307,7 +350,7 @@ const el = {
   present:$('present'), device:$('device'), screen:$('screen'),
   statusbar:$('statusbar'), app:$('app'), island:$('island'),
   fallback:$('fallback'), popout:$('popout'), clock:$('clock'), scaler:$('scaler'),
-  exitPresent:$('exit-present'), reserve:$('reserve'),
+  bar:$('bar'), showBar:$('show-bar'), reserve:$('reserve'),
   swatches:$('swatches'), bdColor:$('bd-color'), veil:$('veil'),
 };
 
@@ -316,8 +359,11 @@ const store = {
   set(k, v) { try { localStorage.setItem('pcsframe.' + k, JSON.stringify(v)); } catch (e) {} },
 };
 
+// Earlier versions used model-year ids; map a saved one onto its successor.
+const OLD_IDS = { ip15p:'ipp', ip15pm:'ippm', px8:'pixel', s24:'galaxy' };
+
 let state = {
-  device:   store.get('device', 'ip15pm'),   // Pro Max — biggest screen for demos
+  device:   (v => OLD_IDS[v] || v)(store.get('device', 'ippm')),   // Pro Max — biggest screen for demos
   landscape:store.get('landscape', false),
   zoom:     store.get('zoom', 100),   // first run overrides this with a fit-to-window
   sbColor:  store.get('sbColor', '#ffffff'),
@@ -385,6 +431,9 @@ function render() {
     b.setAttribute('aria-pressed', b.dataset.hex.toLowerCase() === state.backdrop.toLowerCase()));
 
   el.island.className = d.notch;
+  // The hinge runs across the long side, so it turns with the device.
+  if (d.fold) el.device.dataset.fold = state.landscape ? 'v' : 'h';
+  else delete el.device.dataset.fold;
 
   document.documentElement.style.setProperty('--scale', state.zoom / 100);
   el.zoom.value = state.zoom;
@@ -498,11 +547,42 @@ $('reset').addEventListener('click', () => {
   location.reload();
 });
 
+// Reps forget presenter mode, so the controls tuck themselves away a few
+// seconds after the mouse leaves them. The timer re-checks before hiding
+// rather than trusting that mouseleave/focusout always fire.
+const AUTO_HIDE_MS = 4000;
+let hideTimer = null;
+let nudgeTimer = null;
+
+function barInUse() {
+  // Hovering, or typing an address. Other controls don't count: Chrome leaves
+  // focus on whatever was last clicked, which would pin the bar open.
+  return el.bar.matches(':hover') || document.activeElement === el.url;
+}
+function scheduleHide() {
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => barInUse() ? scheduleHide() : setPresenting(true), AUTO_HIDE_MS);
+}
+function nudge(ms) {
+  el.showBar.classList.add('nudge');
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(() => el.showBar.classList.remove('nudge'), ms);
+}
+
 function setPresenting(on) {
   document.body.classList.toggle('presenting', on);
+  clearTimeout(hideTimer);
+  // On hide, flash the way back in so a rep sees where the controls went.
+  if (on) nudge(2500); else scheduleHide();
 }
 el.present.addEventListener('click', () => setPresenting(true));
-el.exitPresent.addEventListener('click', () => setPresenting(false));
+el.showBar.addEventListener('click', () => setPresenting(false));
+['mouseleave', 'focusout', 'input', 'change'].forEach(t => el.bar.addEventListener(t, scheduleHide));
+// The phone's iframe swallows mouse events, so this only fires over the
+// backdrop and bezel, which is exactly when the rep is reaching for controls.
+$('stage').addEventListener('mousemove', () => {
+  if (document.body.classList.contains('presenting')) nudge(1500);
+});
 el.bdColor.addEventListener('input', () => { state.backdrop = el.bdColor.value; render(); });
 
 document.addEventListener('keydown', e => {
@@ -531,6 +611,7 @@ if (firstRun) fitToWindow();
 tickClock();
 setInterval(tickClock, 15000);
 load(state.url);
+scheduleHide();
 </script>
 </body>
 </html>

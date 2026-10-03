@@ -96,14 +96,17 @@
     outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent;
   }
   #swatches button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  /* #reserve holds the post-scale footprint so the stage can scroll to it;
+  /* zoom, not transform:scale. A transform has Chrome draw the app at full
+     size and then shrink the picture, which blurs its text; zoom makes the app
+     draw at the final size (it sees a devicePixelRatio of 0.8 at 80%) while
+     still laying out at the device's width. Zoom also changes the layout box,
+     so the stage scrolls to the full device with no footprint to reserve.
      margin:auto centres without clipping the edges the way justify-content
-     :center does once the device exceeds the stage. #scaler must stay at its
-     natural size — sizing it would resize the device, then scale it again. */
-  #reserve { margin: auto; flex: 0 0 auto; }
+     :center does once the device exceeds the stage. */
   #scaler {
+    margin: auto; flex: 0 0 auto;
     width: max-content; height: max-content;
-    transform: scale(var(--scale)); transform-origin: top left;
+    zoom: var(--scale);
   }
 
   /* ---------- device shell ---------- */
@@ -290,7 +293,7 @@
 </button>
 
 <div id="stage">
-  <div id="reserve"><div id="scaler">
+  <div id="scaler">
     <div id="device">
       <span class="btn-side btn-power"></span>
       <span class="btn-side btn-vol-u"></span>
@@ -314,7 +317,7 @@
       </div>
       <div id="island"></div>
     </div>
-  </div></div>
+  </div>
 </div>
 
 <script>
@@ -350,7 +353,7 @@ const el = {
   present:$('present'), device:$('device'), screen:$('screen'),
   statusbar:$('statusbar'), app:$('app'), island:$('island'),
   fallback:$('fallback'), popout:$('popout'), clock:$('clock'), scaler:$('scaler'),
-  bar:$('bar'), showBar:$('show-bar'), reserve:$('reserve'),
+  bar:$('bar'), showBar:$('show-bar'),
   swatches:$('swatches'), bdColor:$('bd-color'), veil:$('veil'),
 };
 
@@ -440,10 +443,6 @@ function render() {
   el.zoomVal.textContent = state.zoom + '%';
   el.select.value = d.id;
   el.sbColor.value = state.sbColor;
-
-  // Reserve the post-scale footprint so the stage can scroll to the full device.
-  el.reserve.style.width  = (w + 22) * (state.zoom / 100) + 'px';
-  el.reserve.style.height = (h + 22) * (state.zoom / 100) + 'px';
 
   ['device','landscape','zoom','sbColor','backdrop'].forEach(k => store.set(k, state[k]));
 }
